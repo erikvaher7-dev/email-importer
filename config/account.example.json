@@ -1,0 +1,11 @@
+{
+  "account_email": "me@example.com",
+  "provider": "gmail",
+  "imap": {
+    "host": "imap.gmail.com",
+    "port": 993,
+    "ssl": true,
+    "username": "me@example.com",
+    "password": "app-password-here"
+  }
+}
