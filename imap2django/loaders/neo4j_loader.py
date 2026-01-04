@@ -1,5 +1,5 @@
 """
-Neo4j loader stub (optional).
+Neo4j loader stub.
 You can keep SQL as primary, or switch backend=neo4j in the command.
 
 This file is intentionally minimal. It shows the pattern: MERGE by unique keys.
