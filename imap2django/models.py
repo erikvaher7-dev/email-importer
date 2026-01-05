@@ -31,6 +31,7 @@ class Person(models.Model):
 class Thread(models.Model):
     thread_key = models.CharField(max_length=128, unique=True)
     subject_norm = models.CharField(max_length=512, blank=True, default="")
+    root_message = models.ForeignKey('Message', on_delete=models.SET_NULL, null=True, blank=True, related_name="root_threads")
     created_at = models.DateTimeField(auto_now_add=True)
 
 class Message(models.Model):
@@ -52,6 +53,7 @@ class Message(models.Model):
     size = models.IntegerField(default=0)
 
     thread = models.ForeignKey(Thread, on_delete=models.SET_NULL, null=True, blank=True, related_name="messages")
+    parent_message = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name="replies")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -78,13 +80,35 @@ class Recipient(models.Model):
     type = models.CharField(max_length=8, choices=TYPES)
 
 class Attachment(models.Model):
-    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="attachments")
+    sha256 = models.CharField(max_length=64, unique=True, db_index=True)
     filename = models.CharField(max_length=512, blank=True, default="")
     content_type = models.CharField(max_length=255, blank=True, default="")
-    size = models.IntegerField(default=0)
+    size = models.BigIntegerField(default=0)
+    storage_path = models.CharField(max_length=1024, blank=True, default="")
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    messages = models.ManyToManyField(Message, through='MessageAttachment', related_name='attachments')
+
+class MessageAttachment(models.Model):
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+    attachment = models.ForeignKey(Attachment, on_delete=models.CASCADE)
     part_id = models.CharField(max_length=64, blank=True, default="")
-    sha256 = models.CharField(max_length=64, blank=True, default="")
-    storage_url = models.CharField(max_length=1024, blank=True, default="")
+    
+    class Meta:
+        unique_together = [("message", "attachment", "part_id")]
+
+class BodyChunk(models.Model):
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="body_chunks")
+    chunk_type = models.CharField(max_length=10, choices=[("text", "Text"), ("html", "HTML")])
+    chunk_index = models.IntegerField()
+    content = models.TextField()
+    content_hash = models.CharField(max_length=64, db_index=True)
+    
+    class Meta:
+        unique_together = [("message", "chunk_type", "chunk_index")]
+        indexes = [
+            models.Index(fields=["message", "chunk_type", "chunk_index"]),
+        ]
 
 class ImportCheckpoint(models.Model):
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="checkpoints")
