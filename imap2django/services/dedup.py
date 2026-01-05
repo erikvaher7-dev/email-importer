@@ -1,6 +1,8 @@
 from django.db import transaction
-from ..models import Person, Message, Recipient, Attachment
-from ..utils import norm_email
+from django.utils import timezone
+from ..models import Person, Message, Recipient, Attachment, MessageAttachment
+from ..utils import norm_email, sha256_bytes
+from ..services.storage import storage_backend
 
 def upsert_person(email_norm: str, display_name: str = "") -> Person:
     key = email_norm
@@ -16,9 +18,6 @@ def upsert_person(email_norm: str, display_name: str = "") -> Person:
 
 @transaction.atomic
 def upsert_message_and_relations(n, internal_date=None):
-    """
-    Returns (message, created_bool)
-    """
     msg, created = Message.objects.get_or_create(
         raw_sha256=n.raw_sha256,
         defaults={
@@ -35,6 +34,14 @@ def upsert_message_and_relations(n, internal_date=None):
             "size": n.size,
         }
     )
+    
+    if not created and not msg.content_fingerprint:
+        msg.content_fingerprint = n.content_fingerprint
+        msg.save(update_fields=["content_fingerprint"])
+    
+    if created:
+        from ..services.chunking import chunker
+        chunker.store_chunks(msg, n.body_text, n.body_html)
 
     # If it already existed, we still might want to update missing message_id
     if not created and n.message_id and not msg.message_id:
@@ -63,11 +70,22 @@ def upsert_message_and_relations(n, internal_date=None):
                 Recipient.objects.create(message=msg, person=p, type=Recipient.BCC)
 
         for a in n.attachments:
-            Attachment.objects.create(
+            attachment, _ = Attachment.objects.get_or_create(
+                sha256=a.sha256,
+                defaults={
+                    'filename': a.filename or "",
+                    'content_type': a.content_type or "",
+                    'size': a.size or 0,
+                    'storage_path': storage_backend.store(a.payload, a.sha256),
+                }
+            )
+            if not _:
+                attachment.last_seen_at = timezone.now()
+                attachment.save(update_fields=['last_seen_at'])
+            
+            MessageAttachment.objects.get_or_create(
                 message=msg,
-                filename=a.filename or "",
-                content_type=a.content_type or "",
-                size=a.size or 0,
+                attachment=attachment,
                 part_id=a.part_id or "",
             )
 
