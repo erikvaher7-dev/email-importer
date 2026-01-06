@@ -23,8 +23,9 @@ class NormalizedEmail:
     size: int
 
 def compute_content_fingerprint(subject_norm: str, from_email: str, body_text: str) -> str:
-    # Small stable “semantic-ish” hash (not perfect, but useful fallback).
-    snippet = (body_text or "")[:2000]
+    from .quoted_content import strip_quoted_content
+    body_clean = strip_quoted_content(body_text or "")
+    snippet = body_clean[:2000]
     payload = f"{subject_norm}|{from_email}|{snippet}".encode("utf-8", errors="replace")
     return sha256_bytes(payload)
 

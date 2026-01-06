@@ -12,6 +12,8 @@ class ParsedAttachment:
     content_type: str
     size: int
     part_id: str
+    sha256: str
+    payload: bytes
 
 @dataclass
 class ParsedEmail:
@@ -57,11 +59,14 @@ def _extract_bodies(msg: EmailMessage) -> Tuple[str, str, List[ParsedAttachment]
 
             if is_attachment:
                 payload = part.get_payload(decode=True) or b""
+                from ..utils import sha256_bytes
                 attachments.append(ParsedAttachment(
                     filename=filename,
                     content_type=ctype,
                     size=len(payload),
                     part_id=str(i),
+                    sha256=sha256_bytes(payload),
+                    payload=payload,
                 ))
                 continue
 

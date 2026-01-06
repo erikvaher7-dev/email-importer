@@ -19,11 +19,16 @@ This project provides a comprehensive solution for importing emails from IMAP se
 - **Multi-Account Support**: Import emails from multiple IMAP accounts into a single database
 - **IMAP Integration**: Compatible with any IMAP server (Gmail, Outlook, etc.)
 - **MIME Parsing**: Extract plain text, HTML body parts, and attachment metadata
-- **Global Deduplication**: SHA256 hash-based deduplication across all accounts
-- **Thread Building**: Reconstruct email threads using `In-Reply-To` and `References` headers
+- **Global Message Deduplication**: SHA256 hash-based deduplication across all accounts (exact duplicates)
+- **Global Attachment Deduplication**: Hash-based attachment storage - same file stored once, linked to multiple messages
+- **Content-Based Deduplication**: Content fingerprinting with quoted content stripping for near-duplicate detection
+- **Advanced Thread Building**: Graph-based algorithm reconstructing email threads using headers, heuristics, and content fingerprints
+- **Body Chunking**: Efficient storage of large message bodies in 64KB chunks with UTF-8 boundary safety
+- **Robust Threading**: Handles circular references, broken chains, orphaned messages, and forwarded content
 - **Idempotent Imports**: Safe to re-run without creating duplicates
 - **Streaming Mode**: Process large mailboxes (100k+ emails) incrementally
 - **Checkpointing**: Resume interrupted imports from the last processed email
+- **Error Resilience**: Custom exception handling and retry mechanisms for production reliability
 
 ## Getting Started
 
@@ -54,6 +59,7 @@ docker compose up -d
 ```
 
 This starts:
+
 - **PostgreSQL** (for Django/SQL backend)
 - **Neo4j** (for graph database backend)
 
@@ -143,6 +149,7 @@ python manage.py import_imap --config config/account.json --backend sql --batch 
 ```
 
 **Parameters**:
+
 - `--config`: Path to IMAP account configuration file
 - `--backend`: Database backend (`sql` or `neo4j`)
 - `--batch`: Number of emails to process per batch (default: 200)
@@ -161,11 +168,15 @@ python manage.py runserver
 Access the admin panel at [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
 
 Available data models:
+
 - **Account**: Email accounts
 - **Mailbox**: Folders (INBOX, Sent Items, etc.)
-- **Messages**: Imported emails
-- **Recipients**: Email contacts
-- **Threads**: Grouped email conversations
+- **Messages**: Imported emails (with content fingerprints and parent relationships)
+- **Threads**: Grouped email conversations (with root message tracking)
+- **Person**: Normalized email contacts
+- **Recipients**: Message-to-person relationships (TO/CC/BCC)
+- **Attachments**: Deduplicated attachment files (many-to-many with messages)
+- **BodyChunks**: Chunked message body storage for efficient handling of large emails
 
 #### Rebuilding Threads
 
@@ -192,10 +203,23 @@ NEO4J_PASSWORD=password123
 python manage.py import_imap --config config/account.json --backend neo4j --batch 200 --max 10
 ```
 
+## Architecture Highlights
+
+The system is designed with production reliability in mind:
+
+- **Deduplication Strategy**: Three-layer approach - exact duplicates (raw SHA256), near-duplicates (content fingerprint), and attachment deduplication
+- **Threading Algorithm**: Graph-based reconstruction with fallback heuristics for edge cases
+- **Storage Efficiency**: Body chunking for large messages, hash-based attachment storage
+- **Error Resilience**: Custom exceptions, retry mechanisms, and graceful error handling
+
+For detailed information about the improvements and design decisions, see [IMPROVEMENTS_REFLECTION.md](IMPROVEMENTS_REFLECTION.md).
+
 ## Testing
 
 To ensure the project is working correctly:
 
 - Re-run the import with different folders and verify no duplicates appear
 - Check if threads are correctly grouped after running `rebuild_threads`
+- Verify attachments are deduplicated (same file hash should link to multiple messages)
+- Test with large emails to verify body chunking works correctly
 - Open the Neo4j browser (if using Neo4j) at [http://localhost:7474](http://localhost:7474) to explore the graph of messages, threads, and people

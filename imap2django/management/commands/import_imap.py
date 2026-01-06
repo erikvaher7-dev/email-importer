@@ -100,30 +100,36 @@ class Command(BaseCommand):
                         if not raw:
                             continue
 
-                        parsed = parse_rfc822(raw)
-                        date_dt = parse_date_to_dt(parsed.date or "")
-                        norm = normalize(parsed, raw, size=size, date_dt=date_dt)
+                        try:
+                            parsed = parse_rfc822(raw)
+                            date_dt = parse_date_to_dt(parsed.date or "")
+                            norm = normalize(parsed, raw, size=size, date_dt=date_dt)
 
-                        if backend == "sql":
-                            load_sql(
-                                account_email=account_email,
-                                provider=provider,
-                                mailbox_name=folder,
-                                uid=uid,
-                                flags=flags,
-                                internal_date=internal_date,
-                                normalized=norm,
+                            if backend == "sql":
+                                load_sql(
+                                    account_email=account_email,
+                                    provider=provider,
+                                    mailbox_name=folder,
+                                    uid=uid,
+                                    flags=flags,
+                                    internal_date=internal_date,
+                                    normalized=norm,
+                                )
+                            else:
+                                load_neo4j(
+                                    account_email=account_email,
+                                    provider=provider,
+                                    mailbox_name=folder,
+                                    uid=uid,
+                                    flags=flags,
+                                    internal_date=internal_date,
+                                    normalized=norm,
+                                )
+                        except Exception as e:
+                            self.stdout.write(
+                                self.style.WARNING(f"Error processing UID {uid} in {folder}: {e}")
                             )
-                        else:
-                            load_neo4j(
-                                account_email=account_email,
-                                provider=provider,
-                                mailbox_name=folder,
-                                uid=uid,
-                                flags=flags,
-                                internal_date=internal_date,
-                                normalized=norm,
-                            )
+                            continue
 
                         processed_in_folder += 1
                         total += 1
